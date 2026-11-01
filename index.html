@@ -280,6 +280,16 @@ dialog[open]{animation:sube .25s cubic-bezier(.2,.8,.2,1)}
 
 @media (min-width:700px){ .top h1{font-size:32px} }
 @media (prefers-reduced-motion:reduce){ *{transition:none!important;animation:none!important} }
+.aj-cab{display:flex;align-items:center;gap:8px;margin:0 0 10px}
+.aj-cab .pt{flex:none}
+.aj-nombre{flex:1;min-width:0;margin-top:0;font-weight:700;padding:8px 10px}
+.aj-tipo{font-size:12.5px;font-weight:700;color:var(--ink2);white-space:nowrap}
+.aj-sacar{flex:none;background:none;border:1.5px solid var(--line);border-radius:10px;padding:7px 10px;font-size:13.5px;font-weight:700;color:var(--ink2)}
+.nuevo-fijo{margin-top:16px;padding-top:16px;border-top:2px dashed var(--line)}
+.baja-fila{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.baja-fila span{min-width:0;font-weight:700}
+.baja-fila small{display:block;font-weight:500;font-size:13px;color:var(--ink2)}
+.baja-fila .btn{padding:9px 12px;font-size:14px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -420,8 +430,22 @@ dialog[open]{animation:sube .25s cubic-bezier(.2,.8,.2,1)}
 
     <div class="card">
       <h3>Tus pagos fijos</h3>
-      <p class="sub">Los préstamos se descuentan solos mes a mes hasta la última cuota.</p>
+      <p class="sub">Cambiales el nombre, sacá los que ya no pagás o agregá uno nuevo. Los préstamos y deudas se descuentan solos hasta la última cuota.</p>
       <div id="aFijos"></div>
+      <div class="nuevo-fijo">
+        <p class="aj-nom" style="margin-top:6px">Agregar un pago fijo</p>
+        <div class="chips" id="nTipo">
+          <button type="button" class="chip on" data-nt="tarjeta">Tarjeta</button>
+          <button type="button" class="chip" data-nt="prestamo">Préstamo</button>
+          <button type="button" class="chip" data-nt="servicio">Servicio</button>
+          <button type="button" class="chip" data-nt="deuda">Deuda con alguien</button>
+        </div>
+        <label class="campo" style="margin-top:12px">Nombre
+          <input class="inp" id="nNombre" maxlength="40" placeholder="Ej: Tarjeta Galicia" autocomplete="off">
+        </label>
+        <div class="fila-btns"><button class="btn" type="button" id="nAgregar">Agregar</button></div>
+      </div>
+      <div id="aBajas"></div>
     </div>
 
     <div class="card">
@@ -614,6 +638,7 @@ const COL = {
   prestamo: ["#FF7A1A", "#200C00"], tarjeta: ["#FFC93C", "#2B1E00"], servicio: ["#3EC5FF", "#00222F"],
   otros: ["#FF4D6D", "#33000C"], suelto: ["#E8D3B0", "#2A1E0E"], libre: ["#4ADE80", "#00290F"]
 };
+COL.deuda = ["#C084FC", "#1E0833"];
 const PASTELES = [["#FFC93C","#2B1E00"],["#FF7A1A","#200C00"],["#4ADE80","#00290F"],["#FF4D6D","#33000C"],["#C084FC","#1E0833"],["#3EC5FF","#00222F"],["#FB923C","#2E1000"],["#2DD4BF","#00261F"],["#F9A8D4","#33001A"],["#E8D3B0","#2A1E0E"]];
 const GEMAS = ["#FF7A1A","#FFC93C","#FF3B30","#3EC5FF","#4ADE80","#C084FC","#F9A8D4","#2DD4BF","#FB923C","#E8D3B0"];
 const GEMA_SVG = '<svg viewBox="0 0 24 26" aria-hidden="true"><polygon class="g0" points="12,1 23,7 23,19 12,25 1,19 1,7"/><polygon class="g1" points="12,1 23,7 17,10 12,7"/><polygon class="g2" points="1,7 12,1 12,7 7,10"/><polygon class="g3" points="23,19 12,25 12,19 17,16"/><polygon class="g4" points="1,19 1,7 7,10 7,16"/><polygon class="g5" points="12,7 17,10 17,16 12,19 7,16 7,10"/></svg>';
@@ -638,18 +663,29 @@ function cfgBase() {
     { id: "sus",   nombre: "Suscripciones",          tipo: "servicio", estimado: 27000 }
   ]};
 }
+const TIPOS = { tarjeta: "Tarjeta", prestamo: "Préstamo", servicio: "Servicio", deuda: "Deuda" };
+const cuotaFija = t => t === "prestamo" || t === "deuda";
 function normCfg(c) {
-  const base = cfgBase(); c = c || {};
+  c = c || {};
+  const base = cfgBase().fijos;
   const out = { ingreso: +c.ingreso || 0, gastoSuelto: +c.gastoSuelto || 0, calAuto: !!c.calAuto, fijos: [] };
-  base.fijos.forEach(b => {
-    const f = (c.fijos || []).find(x => x.id === b.id) || {};
-    const m = Object.assign({}, b, f, { tipo: b.tipo });
-    if (m.tipo === "prestamo") { m.cuota = +m.cuota || 0; m.cuotas = parseInt(m.cuotas) || 0; m.primera = /^\d{4}-\d{2}$/.test(m.primera) ? m.primera : mesHoy(); }
+  const lista = Array.isArray(c.fijos) && c.fijos.length ? c.fijos : base;
+  const vistos = new Set();
+  lista.forEach(f0 => {
+    if (!f0 || !f0.id || vistos.has(String(f0.id))) return;
+    vistos.add(String(f0.id));
+    const b = base.find(x => x.id === f0.id) || {};
+    const m = Object.assign({}, b, f0, { id: String(f0.id) });
+    if (!TIPOS[m.tipo]) m.tipo = b.tipo || "servicio";
+    m.nombre = String(m.nombre || TIPOS[m.tipo]).slice(0, 40);
+    if (cuotaFija(m.tipo)) { m.cuota = +m.cuota || 0; m.cuotas = parseInt(m.cuotas) || 0; m.primera = /^\d{4}-\d{2}$/.test(m.primera) ? m.primera : mesHoy(); }
     if (m.tipo === "servicio") m.estimado = +m.estimado || 0;
     m.vence = Math.max(0, Math.min(31, parseInt(m.vence) || 0));
     const vs = {}; Object.entries(m.vencimientos || {}).forEach(([k, v]) => { if (/^\d{4}-\d{2}$/.test(k) && /^\d{4}-\d{2}-\d{2}$/.test(v)) vs[k] = v; });
     m.vencimientos = vs;
     if (m.tipo === "tarjeta") { m.cargoFijo = +m.cargoFijo || 0; m.cargoDesde = /^\d{4}-\d{2}$/.test(m.cargoDesde) ? m.cargoDesde : mesHoy(); }
+    m.baja = /^\d{4}-\d{2}$/.test(m.baja) ? m.baja : "";
+    if (!m.baja) delete m.baja;
     out.fijos.push(m);
   });
   return out;
@@ -677,9 +713,10 @@ const UI = { tab: "mes", mes: mesHoy() };
 /* =========================================================
    Cálculos
    ========================================================= */
+const fijosVivos = M => S.config.fijos.filter(f => !f.baja || M < f.baja);
 const tarjetas = () => S.config.fijos.filter(f => f.tipo === "tarjeta");
 const esTarjeta = medio => tarjetas().some(t => t.id === medio);
-const medios = () => MEDIOS_BASE.concat(tarjetas().map(t => ({ id: t.id, n: t.nombre, tj: true })));
+const medios = () => MEDIOS_BASE.concat(tarjetas().filter(t => !t.baja).map(t => ({ id: t.id, n: t.nombre, tj: true })));
 const medioNom = id => (medios().find(m => m.id === id) || { n: id || "—" }).n;
 const mesDeMov = m => m.tipo === "fijo" ? m.mes : (m.fecha || "").slice(0, 7);
 
@@ -720,10 +757,10 @@ function comprasTarjeta(cardId, M) {
 }
 function datosMes(M) {
   const cur = mesHoy();
-  const fijos = S.config.fijos.map(f => {
+  const fijos = fijosVivos(M).map(f => {
     const rec = S.movs.find(x => x.tipo === "fijo" && x.item === f.id && x.mes === M);
     let est = 0, activo = true, nota = "";
-    if (f.tipo === "prestamo") {
+    if (cuotaFija(f.tipo)) {
       activo = prestamoActivo(f, M); est = activo ? f.cuota : 0;
       if (!f.cuota || !f.cuotas) nota = "Poné la cuota en Ajustes";
       else if (activo) { const q = f.cuotas - mesDif(f.primera, M); nota = q === 1 ? "Última cuota" : "Quedan " + q + " cuotas"; }
@@ -739,13 +776,13 @@ function datosMes(M) {
     }
     return { f, rec, est, monto: rec ? rec.monto : est, real: !!rec, pagado: !!(rec && rec.pagado), activo: activo || !!rec, nota, vence: venceDe(f, M) };
   });
-  const sum = t => fijos.filter(x => x.f.tipo === t).reduce((s, x) => s + x.monto, 0);
+  const sum = (...t) => fijos.filter(x => t.includes(x.f.tipo)).reduce((s, x) => s + x.monto, 0);
   const gastos = S.movs.filter(x => x.tipo === "gasto" && x.fecha.slice(0, 7) === M);
   const directos = gastos.filter(g => !esTarjeta(g.medio));
   const ingresos = S.movs.filter(x => x.tipo === "ingreso" && x.fecha.slice(0, 7) === M);
   const d = {
     M, cur: M === cur, futuro: M > cur, pasado: M < cur, fijos, gastos, ingresos,
-    prestamos: sum("prestamo"), tarjetas: sum("tarjeta"), servicios: sum("servicio"),
+    prestamos: sum("prestamo", "deuda"), tarjetas: sum("tarjeta"), servicios: sum("servicio"),
     otros: directos.reduce((s, g) => s + g.monto, 0),
     suelto: M > cur ? (S.config.gastoSuelto || 0) : 0,
     ingreso: (S.config.ingreso || 0) + ingresos.reduce((s, x) => s + x.monto, 0)
@@ -757,7 +794,7 @@ function datosMes(M) {
 }
 function segmentos(d, conLibre) {
   const s = [
-    { k: "Préstamos", v: d.prestamos, c: COL.prestamo },
+    { k: S.config.fijos.some(f => f.tipo === "deuda" && !f.baja) ? "Préstamos y deudas" : "Préstamos", v: d.prestamos, c: COL.prestamo },
     { k: "Tarjetas", v: d.tarjetas, c: COL.tarjeta },
     { k: "Servicios", v: d.servicios, c: COL.servicio },
     { k: "Otros gastos", v: d.otros, c: COL.otros },
@@ -772,13 +809,13 @@ function rangoMeses() {
     const m = mesDeMov(x); if (m && m < min) min = m;
     if (x.tipo === "gasto" && esTarjeta(x.medio) && x.desde) { const e = mesAdd(x.desde, x.cuotas - 1); if (e > max) max = e; }
   });
-  S.config.fijos.forEach(f => { if (f.tipo === "prestamo" && f.cuota && f.cuotas) { const e = prestamoFin(f); if (e > max) max = e; } });
+  S.config.fijos.forEach(f => { if (cuotaFija(f.tipo) && !f.baja && f.cuota && f.cuotas) { const e = prestamoFin(f); if (e > max) max = e; } });
   const tope = mesAdd(cur, 36); if (max > tope) max = tope;
   const piso = mesAdd(cur, -24); if (min < piso) min = piso;
   return { min, max };
 }
 function deudaPrestamos(desde) {
-  return S.config.fijos.filter(f => f.tipo === "prestamo" && f.cuota && f.cuotas).reduce((s, f) => {
+  return S.config.fijos.filter(f => cuotaFija(f.tipo) && !f.baja && f.cuota && f.cuotas).reduce((s, f) => {
     const hechas = Math.max(0, mesDif(f.primera, desde));
     return s + f.cuota * Math.max(0, f.cuotas - hechas);
   }, 0);
@@ -1042,7 +1079,7 @@ function renderProy() {
 
   // tabla
   const finPorMes = {};
-  S.config.fijos.filter(f => f.tipo === "prestamo" && f.cuota && f.cuotas).forEach(f => { const m = mesAdd(prestamoFin(f), 1); (finPorMes[m] = finPorMes[m] || []).push(f.nombre); });
+  S.config.fijos.filter(f => cuotaFija(f.tipo) && !f.baja && f.cuota && f.cuotas).forEach(f => { const m = mesAdd(prestamoFin(f), 1); (finPorMes[m] = finPorMes[m] || []).push(f.nombre); });
   $("#tProy").innerHTML = rows.map(d => {
     const hito = finPorMes[d.M];
     return `<tr class="${hito ? "hito" : ""}"><td>${mesCorto(d.M)}${hito ? `<span class="tag">sin ${esc(hito.join(" ni "))}</span>` : ""}</td>
@@ -1062,7 +1099,7 @@ function renderProy() {
   });
 
   // préstamos
-  const pres_ = S.config.fijos.filter(f => f.tipo === "prestamo" && f.cuota && f.cuotas);
+  const pres_ = S.config.fijos.filter(f => cuotaFija(f.tipo) && !f.baja && f.cuota && f.cuotas);
   const deuda = deudaPrestamos(cur);
   if (!pres_.length) $("#deudaTxt").textContent = "Cargá la cuota y las cuotas que faltan de cada préstamo en Ajustes.";
   else {
@@ -1171,25 +1208,31 @@ function textoPrestamo(f) {
   if (!f.cuota || !f.cuotas) return "Completá la cuota y cuántas faltan.";
   return "Total a pagar " + fmt(f.cuota * f.cuotas) + ". Terminás en " + mesNom(prestamoFin(f)).toLowerCase() + ".";
 }
+function cabAj(f, dot) {
+  return `<div class="aj-cab">${dot}<input class="inp aj-nombre" data-k="nombre" value="${esc(f.nombre)}" maxlength="40" aria-label="Nombre de ${esc(f.nombre)}"><span class="aj-tipo">${esc(TIPOS[f.tipo])}</span><button type="button" class="aj-sacar" data-sacar="${f.id}" aria-label="Sacar ${esc(f.nombre)}">Sacar</button></div>`;
+}
 function renderAjustes() {
   $("#aIngreso").value = S.config.ingreso ? fmtNum(S.config.ingreso) : "";
-  $("#aFijos").innerHTML = S.config.fijos.map(f => {
+  $("#aFijos").innerHTML = S.config.fijos.filter(f => !f.baja).map(f => {
     const c = COL[f.tipo], dot = `<span class="pt" style="background:${c[0]};box-shadow:inset 0 0 0 1.5px ${c[1]}55"></span>`;
-    if (f.tipo === "prestamo") return `<div class="aj-item" data-id="${f.id}"><p class="aj-nom">${dot}${esc(f.nombre)}</p><div class="aj-grid">
+    if (cuotaFija(f.tipo)) return `<div class="aj-item" data-id="${f.id}">${cabAj(f, dot)}<div class="aj-grid">
         <label>Cuota por mes<input class="inp num" data-k="cuota" inputmode="decimal" value="${f.cuota ? fmtNum(f.cuota) : ""}" placeholder="$ 0"></label>
         <label>Cuotas que faltan<input class="inp num" data-k="cuotas" inputmode="numeric" value="${f.cuotas || ""}" placeholder="0"></label>
         <label>Próxima cuota a pagar<select class="inp" data-k="primera">${opcionesMes(f.primera, -3, 12)}</select></label>
         <label>Día que vence<input class="inp num" data-k="vence" inputmode="numeric" value="${f.vence || ""}" placeholder="Ej: 10"></label></div>
         <p class="hint" data-hint>${esc(textoPrestamo(f))}</p></div>`;
-    if (f.tipo === "servicio") return `<div class="aj-item" data-id="${f.id}"><p class="aj-nom">${dot}${esc(f.nombre)}</p><div class="aj-grid">
+    if (f.tipo === "servicio") return `<div class="aj-item" data-id="${f.id}">${cabAj(f, dot)}<div class="aj-grid">
         <label>Monto aproximado por mes<input class="inp num" data-k="estimado" inputmode="decimal" value="${f.estimado ? fmtNum(f.estimado) : ""}" placeholder="$ 0"></label>
         <label>Día que vence<input class="inp num" data-k="vence" inputmode="numeric" value="${f.vence || ""}" placeholder="Ej: 15"></label></div>
         <p class="hint">Se usa para proyectar. Cuando llega la factura, cargás el monto real en Pagos fijos.</p></div>`;
-    return `<div class="aj-item" data-id="${f.id}"><p class="aj-nom">${dot}${esc(f.nombre)}</p>
+    return `<div class="aj-item" data-id="${f.id}">${cabAj(f, dot)}
         <div class="aj-grid"><label>Día que vence el resumen<input class="inp num" data-k="vence" inputmode="numeric" value="${f.vence || ""}" placeholder="Ej: 10"></label>
         <label>Cargos fijos por mes<input class="inp num" data-k="cargoFijo" inputmode="decimal" value="${f.cargoFijo ? fmtNum(f.cargoFijo) : ""}" placeholder="$ 0"></label></div>
         <p class="hint">El día se usa todos los meses; si un resumen vence otro día, cambialo en ese pago. Los cargos fijos (mantenimiento, seguros, comisiones) se suman a las cuotas${f.cargoFijo && f.cargoDesde ? " desde " + esc(mesNom(f.cargoDesde).toLowerCase()) : ""}.</p></div>`;
   }).join("");
+  const bajas = S.config.fijos.filter(f => f.baja);
+  $("#aBajas").innerHTML = bajas.length ? `<p class="aj-nom" style="margin-top:22px">Pagos que sacaste</p>` + bajas.map(f =>
+    `<div class="baja-fila"><span>${esc(f.nombre)}<small>${esc(TIPOS[f.tipo])}, sin mostrar desde ${esc(mesNom(f.baja).toLowerCase())}</small></span><button type="button" class="btn sec" data-recuperar="${f.id}">Volver a sumar</button></div>`).join("") : "";
   $("#aUrl").value = S.conn.url || ""; $("#aClave").value = S.conn.clave || "";
   $("#cAuto").checked = !!S.config.calAuto;
   $("#cEstado").textContent = S.calErr ? S.calErr : S.calUlt ? "Última vez: " + new Date(S.calUlt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) + "." : S.conn.url ? "" : "Necesita la planilla conectada.";
@@ -1205,9 +1248,56 @@ $("#aFijos").addEventListener("change", e => {
   if (k === "cuota" || k === "estimado" || k === "cargoFijo") { f[k] = parseMonto(e.target.value); e.target.value = f[k] ? fmtNum(f[k]) : ""; if (k === "cargoFijo" && !f.cargoDesde) f.cargoDesde = mesHoy(); }
   else if (k === "vence") { f.vence = Math.max(0, Math.min(31, parseInt(e.target.value) || 0)); e.target.value = f.vence || ""; }
   else if (k === "cuotas") { f[k] = Math.max(0, Math.min(120, parseInt(e.target.value) || 0)); e.target.value = f[k] || ""; }
+  else if (k === "nombre") { const v = e.target.value.trim().slice(0, 40); if (v) f.nombre = v; e.target.value = f.nombre; }
   else f[k] = e.target.value;
   const h = box.querySelector("[data-hint]"); if (h) h.textContent = textoPrestamo(f);
   guardarConfig(); renderNav(); renderMes();
+});
+let nuevoTipo = "tarjeta";
+const EJ_NOMBRE = { tarjeta: "Ej: Tarjeta Galicia", prestamo: "Ej: Préstamo Banco Nación", servicio: "Ej: Internet, alquiler", deuda: "Ej: Plata que le debo a Juan" };
+$("#nTipo").addEventListener("click", e => {
+  const b = e.target.closest("[data-nt]"); if (!b) return;
+  nuevoTipo = b.dataset.nt; $$("#nTipo .chip").forEach(x => x.classList.toggle("on", x === b));
+  $("#nNombre").placeholder = EJ_NOMBRE[nuevoTipo];
+});
+$("#nAgregar").addEventListener("click", () => {
+  const nombre = $("#nNombre").value.trim();
+  if (!nombre) { $("#nNombre").focus(); toast("Poné un nombre"); return; }
+  const id = nuevoTipo.slice(0, 2) + "-" + Date.now().toString(36);
+  const f = { id, nombre: nombre.slice(0, 40), tipo: nuevoTipo, vence: 0, vencimientos: {} };
+  if (cuotaFija(nuevoTipo)) Object.assign(f, { cuota: 0, cuotas: 0, primera: mesHoy() });
+  if (nuevoTipo === "servicio") f.estimado = 0;
+  if (nuevoTipo === "tarjeta") Object.assign(f, { cargoFijo: 0, cargoDesde: mesHoy() });
+  S.config.fijos.push(f);
+  $("#nNombre").value = "";
+  guardarConfig(true); renderAjustes(); renderNav(); renderMes();
+  const box = document.querySelector('#aFijos .aj-item[data-id="' + id + '"]');
+  if (box) { box.scrollIntoView({ block: "center", behavior: "smooth" }); const i = box.querySelector(".aj-grid .inp"); if (i) setTimeout(() => i.focus(), 350); }
+  toast(nombre + " agregado. Completá sus datos");
+});
+$("#aFijos").addEventListener("click", e => {
+  const b = e.target.closest("[data-sacar]"); if (!b) return;
+  const f = S.config.fijos.find(x => x.id === b.dataset.sacar); if (!f) return;
+  const cur = mesHoy();
+  let aviso = "";
+  if (f.tipo === "tarjeta") {
+    const fin = S.movs.filter(g => g.tipo === "gasto" && g.medio === f.id && g.desde).map(g => mesAdd(g.desde, g.cuotas - 1)).sort().pop();
+    if (fin && fin >= cur) aviso = "\n\nOjo: todavía tiene cuotas hasta " + mesNom(fin).toLowerCase() + ". Si la sacás, dejan de contarse en la proyección.";
+  } else if (cuotaFija(f.tipo) && prestamoActivo(f, cur)) {
+    aviso = "\n\nOjo: todavía le quedan cuotas. Si lo sacás, dejan de contarse en la proyección.";
+  }
+  if (!confirm("¿Sacar " + f.nombre + " de tus pagos fijos?\n\nLo que ya cargaste queda en los meses anteriores y lo podés volver a sumar cuando quieras." + aviso)) return;
+  const pagoEsteMes = S.movs.some(x => x.tipo === "fijo" && x.item === f.id && x.mes === cur);
+  f.baja = pagoEsteMes ? mesAdd(cur, 1) : cur;
+  guardarConfig(true); renderAjustes(); renderNav(); renderMes();
+  toast(f.nombre + " sacado");
+});
+$("#aBajas").addEventListener("click", e => {
+  const b = e.target.closest("[data-recuperar]"); if (!b) return;
+  const f = S.config.fijos.find(x => x.id === b.dataset.recuperar); if (!f) return;
+  delete f.baja;
+  guardarConfig(true); renderAjustes(); renderNav(); renderMes();
+  toast(f.nombre + " vuelve a estar en tus pagos");
 });
 $("#cAuto").addEventListener("change", e => {
   if (e.target.checked && !S.conn.url) { e.target.checked = false; $("#cEstado").textContent = "Primero conectá la planilla, abajo."; return; }
@@ -1330,7 +1420,7 @@ function abrirEditor(mov, preset) {
   ED.rubro = (mov && mov.rubro) || "Súper";
   ED.medio = (mov && mov.medio) || preset.medio || "efectivo";
   ED.modo = "total";
-  ED.item = (mov && mov.item) || preset.item || S.config.fijos[0].id;
+  ED.item = (mov && mov.item) || preset.item || (fijosVivos(UI.mes)[0] || {}).id;
   $("#fMonto").value = mov ? fmtNum(mov.monto) : "";
   $("#fDesc").value = mov && mov.tipo !== "fijo" ? mov.descripcion : "";
   $("#fFecha").value = (mov && mov.fecha) || fechaDefault();
@@ -1360,7 +1450,7 @@ function pintarEditor() {
   $$("[data-ver]").forEach(el => el.hidden = !el.dataset.ver.split(" ").includes(ED.tipo));
   $("#fRubros").innerHTML = RUBROS.map(r => `<button type="button" class="chip${r === ED.rubro ? " on" : ""}" data-rubro="${esc(r)}">${esc(r)}</button>`).join("");
   $("#fMedios").innerHTML = medios().map(m => `<button type="button" class="chip${m.tj ? " tj" : ""}${m.id === ED.medio ? " on" : ""}" data-medio="${m.id}">${esc(m.n)}</button>`).join("");
-  $("#fItems").innerHTML = S.config.fijos.map(f => `<button type="button" class="chip${f.id === ED.item ? " on" : ""}" data-it="${f.id}">${esc(f.nombre)}</button>`).join("");
+  $("#fItems").innerHTML = fijosVivos(UI.mes).map(f => `<button type="button" class="chip${f.id === ED.item ? " on" : ""}" data-it="${f.id}">${esc(f.nombre)}</button>`).join("");
   $("#fCuotasBox").hidden = !(ED.tipo === "gasto" && esTarjeta(ED.medio));
   $$("#fModo .chip").forEach(b => b.classList.toggle("on", b.dataset.modo === ED.modo));
   $("#fDesc").placeholder = ED.tipo === "ingreso" ? "Ej: aguinaldo, venta, regalo" : "Ej: súper del sábado";
